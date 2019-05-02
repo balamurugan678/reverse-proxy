@@ -17,6 +17,7 @@ import scala.util.{Failure, Success}
 import com.bazaarvoice.jolt.Chainr
 import com.bazaarvoice.jolt.JsonUtils
 import java.util
+import java.util.List
 
 import akka.stream.scaladsl.Sink
 import com.sun.xml.internal.dtdparser.InputEntity
@@ -59,18 +60,19 @@ class CatsReverseProxy {
             authority = Authority(host = Uri.NamedHost(target.host), port = target.port)
           )
         )
-        val futureResponse = http.singleRequest(proxyRequest).flatMap{ response =>
+        val futureResponse = http.singleRequest(proxyRequest).flatMap { response =>
           response.entity.withoutSizeLimit.dataBytes
-              .runFold(ByteString(""))(_ ++ _)
-              .flatMap(byteString => Gzip.decode(byteString))
-              .map(_.utf8String)
-              .map {
-                respString => HttpResponse(
-                  StatusCodes.OK,
-                  entity = HttpEntity(ContentTypes.`application/json`, respString)
-                )
-              }
-          //Future(response)
+            .runFold(ByteString(""))(_ ++ _)
+            .flatMap(byteString => Gzip.decode(byteString))
+            .map(_.utf8String)
+            .map { respString => {
+
+              HttpResponse(
+                StatusCodes.OK,
+                entity = HttpEntity(ContentTypes.`application/json`, amendJson)
+              )
+            }
+            }
         }
         futureResponse
         /*futureResponse.onComplete {
@@ -112,13 +114,23 @@ class CatsReverseProxy {
     }
   }
 
-  def buildResponseEntity(inputEntity: ResponseEntity):Future[ResponseEntity] = {
+  def amendJson():String = {
+    val chainrSpecJSON = JsonUtils.filepathToList("path/spec.json")
+    val chainr = Chainr.fromSpec(chainrSpecJSON)
+    val inputJSON = JsonUtils.filepathToObject("path/input.json")
+
+    val transformed = chainr.transform(inputJSON)
+    System.out.println(transformed)
+    transformed.toString
+  }
+
+  def buildResponseEntity(inputEntity: ResponseEntity): Future[ResponseEntity] = {
     val compressedByte: Future[ByteString] = for {
       byteString <- inputEntity.dataBytes.runFold(ByteString(""))(_ ++ _)
       decompressedBytes <- Gzip.decode(byteString)
     } yield decompressedBytes
     val responseString: Future[String] = compressedByte.map(_.utf8String)
-    val responseEntity:Future[ResponseEntity] = responseString.flatMap(response => Future(HttpEntity(ContentTypes.`application/json`, response)))
+    val responseEntity: Future[ResponseEntity] = responseString.flatMap(response => Future(HttpEntity(ContentTypes.`application/json`, response)))
     responseEntity
   }
 
