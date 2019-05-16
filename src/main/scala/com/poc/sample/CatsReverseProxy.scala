@@ -120,7 +120,6 @@ class CatsReverseProxy {
     val inputJSON = JsonUtils.filepathToObject("path/input.json")
 
     val transformed = chainr.transform(inputJSON)
-    System.out.println(transformed)
     transformed.toString
   }
 
